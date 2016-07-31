@@ -1,0 +1,448 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description"              : "(SP) - This template deploys a SharePoint Farm with two node. This template is intended to work with the AD and SQL building blocks of the same demo kits.\" **WARNING** This template creates Amazon EC2 Windows instance and related resources. You will be billed for the AWS resources used if you create a stack from this template.",
+    "Parameters"               : {
+        "KeyPairName" : {
+            "Description" : "Public/private key pairs allow you to securely connect to your instance after it launches",
+            "Type"        : "AWS::EC2::KeyPair::KeyName"
+        },
+		
+        "SP1InstanceType" : {
+            "Description" : "Amazon EC2 instance type for the 1st SharePonit Node",
+            "Type"        : "String",
+            "Default"     : "m3.2xlarge",
+            "AllowedValues" : [
+                "m3.xlarge",
+				"m3.2xlarge",
+				"m3.4xlarge"
+            ]
+        },
+		
+        "SP2InstanceType" : {
+            "Description" : "Amazon EC2 instance type for the 2nd SharePonit Node",
+            "Type"        : "String",
+            "Default"     : "m3.2xlarge",
+            "AllowedValues" : [
+                "m3.xlarge",
+				"m3.2xlarge",
+				"m3.4xlarge"
+            ]
+        },		
+			
+        "DomainAdminPassword"   : {
+            "Description" : "Password for the on-premise domain Admin user. This account must be amazing\\StackAdmin, It is also the SharePoint service account. Must be at least 8 characters containing letters, numbers and symbols.default:Password123",
+            "Type"        : "String",
+            "MinLength"   : "8",
+            "MaxLength"   : "32",
+            "AllowedPattern" : "(?=^.{6,255}$)((?=.*\\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*",
+            "NoEcho"         : "true",
+            "Default"        : "Password123"
+        },
+        		
+        "AD1PrivateIp"        : {
+            "Description" : "Fixed private IP for the on-premise first existing Active Directory server located in AZ1",
+            "Type"        : "String",
+            "Default"     : "10.99.0.10"
+        },
+		
+        "AD2PrivateIp"        : {
+            "Description" : "Fixed private IP for the on-premise second existing Active Directory server located in AZ2",
+            "Type"        : "String",
+            "Default"     : "10.99.64.10"
+        },
+			
+        "VPC"                       : {
+            "Description" : "ID of the VPC (e.g., vpc-0343606e)",
+            "Type"        : "AWS::EC2::VPC::Id"
+        },
+		
+		"ELBConfiguration"      : {
+            "Description" : "Specify how to configure the Elastic Load Balancer. Allowed values are internal or external",
+            "AllowedValues" : [
+                "external"
+            ],
+            "Type"          : "String",
+            "Default"       : "external"
+        },
+		
+        "DMZSubnet1Id"          : {
+            "Description" : "ID of the subnet you want to provision the first SharePoint node into (e.g., subnet-a0246dcd)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        },
+		
+        "DMZSubnet2Id"          : {
+            "Description" : "ID of the subnet you want to provision the second SharePoint node into (e.g., subnet-e3246d8e)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        }
+    },
+    "Mappings"                 : {
+		"AWSWinRegionMap" : {
+            "ap-northeast-1" : {
+                "SP1" : "ami-385dfe38",
+				"SP2" : "ami-405dfe40"
+            },
+            "ap-southeast-1" : {
+                "SP1" : "ami-44575616",
+				"SP2" : "ami-4e57561c"
+            }
+		}
+    },
+    "Resources"  : {
+        "SP1"              : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId" : {
+                    "Fn::FindInMap" : [
+                        "AWSWinRegionMap",
+                        {
+                            "Ref" : "AWS::Region"
+                        },
+						"SP1"
+                    ]				
+				},
+                "InstanceType" : {
+                    "Ref" : "SP1InstanceType"
+                },
+                "NetworkInterfaces" : [
+                    {
+                        "DeleteOnTermination" : "true",
+                        "AssociatePublicIpAddress" : "true",
+						"DeviceIndex"         : 0,
+                        "SubnetId"            : {
+                            "Ref" : "DMZSubnet1Id"
+                        },                        
+                        "GroupSet"            : [
+                            {
+                                "Ref" : "SPSecurityGroup"
+                            }
+                        ]
+                    }
+                ],
+                "Tags"              : [
+                    {
+                        "Key" : "Name",
+                        "Value" : "SP1"
+                    }
+                ],
+                "BlockDeviceMappings" : [
+                    {
+                        "DeviceName" : "/dev/sda1",
+                        "Ebs"        : {
+                            "VolumeSize" : "100",
+                            "VolumeType" : "gp2"
+                        }
+                    }
+                ],
+                
+                "KeyName"             : {
+                    "Ref" : "KeyPairName"
+                },
+                "UserData"            : {
+                    "Fn::Base64" : {
+                        "Fn::Join" : [
+                            "",
+                            [
+                                "<powershell>\n",
+                                "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                                    {
+                                        "Ref" : "AD1PrivateIp"
+                                    },
+                                    ",",
+                                    {
+                                        "Ref" : "AD2PrivateIp"
+                                    },
+                                "\n",
+								"do{",
+								"\n",
+								"  sleep 10",
+								"\n",  
+								"} until(Test-NetConnection  ",
+                                {
+                                    "Ref" : "AD1PrivateIp"
+                                },
+								" -Port 53 | ? { $_.TcpTestSucceeded } )",
+								"\n",  
+								"$client = New-Object system.net.WebClient",
+								"\n",
+                                "$client.DownloadFile(\"https://s3-ap-southeast-1.amazonaws.com/aws-demokits/scripts/CustomerizeAccountSetting.ps1\",\"C:\\CustomerizeAccountSetting.ps1\")",
+                                "\n",
+								"powershell.exe -ExecutionPolicy RemoteSigned -Command c:\\CustomerizeAccountSetting.ps1",                                
+                                "  -DomainDNSName \"amazing.com\" -DomainNetBIOSName \"amazing\"  -DomainAdminUser \"StackAdmin\"  -ServerBIOSName \"SP1\"",								
+								"  -DomainAdminPassword \"",
+                                {
+                                    "Ref" : "DomainAdminPassword"
+                                },
+                                "\"",
+								"\n",
+                                "</powershell>\n",
+								"<persist>true</persist>\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+		
+        "SP2"              : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId" : {
+                    "Fn::FindInMap" : [
+                        "AWSWinRegionMap",
+                        {
+                            "Ref" : "AWS::Region"
+                        },
+						"SP2"
+                    ]				
+				},
+                "InstanceType" : {
+                    "Ref" : "SP2InstanceType"
+                },
+                "EbsOptimized" : "true",
+                "NetworkInterfaces" : [
+                    {
+                        "DeleteOnTermination" : "true",
+						"AssociatePublicIpAddress" : "true",
+                        "DeviceIndex"         : 0,
+                        "SubnetId"            : {
+                            "Ref" : "DMZSubnet2Id"
+                        },                        
+                        "GroupSet"            : [
+                            {
+                                "Ref" : "SPSecurityGroup"
+                            }
+                        ]
+                    }
+                ],
+                "Tags"              : [
+                    {
+                        "Key" : "Name",
+                        "Value" : "SP2"
+                    }
+                ],
+                "BlockDeviceMappings" : [
+                    {
+                        "DeviceName" : "/dev/sda1",
+                        "Ebs"        : {
+                            "VolumeSize" : "100",
+                            "VolumeType" : "gp2"
+                        }
+                    }
+                ],
+                
+                "KeyName"             : {
+                    "Ref" : "KeyPairName"
+                },
+                "UserData"            : {
+                    "Fn::Base64" : {
+                        "Fn::Join" : [
+                            "",
+                            [
+                                "<powershell>\n",
+                                "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                                    {
+                                        "Ref" : "AD1PrivateIp"
+                                    },
+                                    ",",
+                                    {
+                                        "Ref" : "AD2PrivateIp"
+                                    },
+                                "\n",
+								"do{",
+								"\n",
+								"  sleep 10",
+								"\n",  
+								"} until(Test-NetConnection  ",
+                                {
+                                    "Ref" : "AD1PrivateIp"
+                                },
+								"  -Port 53 | ? { $_.TcpTestSucceeded } )",
+								"\n",  
+								"$client = New-Object system.net.WebClient",
+								"\n",
+                                "$client.DownloadFile(\"https://s3-ap-southeast-1.amazonaws.com/aws-demokits/scripts/CustomerizeAccountSetting.ps1\",\"C:\\CustomerizeAccountSetting.ps1\")",
+                                "\n",
+								"powershell.exe -ExecutionPolicy RemoteSigned -Command c:\\CustomerizeAccountSetting.ps1",                                
+                                "  -DomainDNSName \"amazing.com\" -DomainNetBIOSName \"amazing\"  -DomainAdminUser \"StackAdmin\"  -ServerBIOSName \"SP1\"",								
+								"  -DomainAdminPassword \"",
+                                {
+                                    "Ref" : "DomainAdminPassword"
+                                },
+                                "\"",
+								"\n",
+                                "</powershell>\n",
+								"<persist>true</persist>\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+		
+        "SPLoadBalancer" : {
+            "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+            "DependsOn" : [
+                "SP1",
+                "SP2"
+            ],
+            "Properties" : {
+                "Subnets" : [
+                    {
+                        "Ref" : "DMZSubnet1Id"
+                    },
+                    {
+                        "Ref" : "DMZSubnet2Id"
+                    }
+                ],				
+                "Instances" : [
+                    {
+                        "Ref" : "SP1"
+                    },
+                    {
+                        "Ref" : "SP2"
+                    }
+                ],
+                "Listeners" : [
+                    {
+                        "LoadBalancerPort" : "80",
+                        "InstancePort"     : "80",
+                        "Protocol"         : "TCP"
+                    }
+                ],
+                "SecurityGroups" : [
+                    {
+                        "Ref" : "SPSecurityGroup"
+                    }
+                ],
+                "HealthCheck"    : {
+                    "Target" : "TCP:80",
+                    "HealthyThreshold" : "3",
+                    "UnhealthyThreshold" : "5",
+                    "Interval"           : "10",
+                    "Timeout"            : "5"
+                }
+            }
+        },		
+        "SPSecurityGroup"      : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "Enable the SharePoint Farm communications",
+                "VpcId"            : {
+                    "Ref" : "VPC"
+                },
+                "SecurityGroupIngress" : [
+                    {
+                        "IpProtocol" : "icmp",
+                        "FromPort"   : "-1",
+                        "ToPort"     : "-1",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "18473",
+                        "ToPort"     : "18473",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "80",
+                        "ToPort"     : "80",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "443",
+                        "ToPort"     : "443",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },					
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "808",
+                        "ToPort"     : "808",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },                    
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "32843",
+                        "ToPort"     : "32843",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+					{
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "53",
+                        "ToPort"     : "53",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "53",
+                        "ToPort"     : "53",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "49152",
+                        "ToPort"     : "65535",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "49152",
+                        "ToPort"     : "65535",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },                                    
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "3389",
+                        "ToPort"     : "3389",
+                        "CidrIp"     : "0.0.0.0/0"
+                    }
+                ]
+            }
+        }
+    },
+    "Outputs"                  : {
+        "DomainAdmin" : {
+            "Value" : "AMAZING\\StackAdmin",
+            "Description" : "Domain administrator account"
+        },
+		"DomainDNSName"  : {
+            "Value" : "amazing.com",
+            "Description" : "Fully qualified domain name (FQDN) of the forest root domain"
+        },
+		"DomainNetBIOSName"  : {
+            "Value" : "amazing",
+            "Description" : "NetBIOS name of the domain"
+        },		
+        "SP1NetBIOSName" : {
+            "Value" : "SP1",
+            "Description" : "NetBIOS name of the 1st SharePoint Node"
+        },
+        "SP2NetBIOSName" : {
+            "Value" : "SP2",
+            "Description" : "NetBIOS name of the 2nd SharePoint Node"
+        },
+		"SPDatabase"  : {
+            "Value" : "amadb",
+            "Description" : "The mirrored database for the SharePoint Farm"
+        },
+		"SPServiceAccount"  : {
+            "Value" : "AMAZING\\StackAdmin",
+            "Description" : "The administrator for the SP server database"
+        },
+		"SPAdministrationCentral"  : {
+            "Value" : "http://sp1:32384/",
+            "Description" : "The Management Console for SharePoint Farm"
+        },
+		"ElasticLoadBalancerName" : {
+            "Value" : {
+                "Ref" : "SPLoadBalancer"
+            },
+            "Description" : "Name of the Elastic Load Balancer. "
+        },
+		"ElasticLoadBalancerURL" : {
+            "Value" :{ "Fn::Join" : [ "", [ "http://", { "Fn::GetAtt" : [ "SPLoadBalancer", "DNSName" ]}]]} ,
+            "Description" : "Address of the Elastic Load Balancer. After configuring your SharePoint Farm connect to your site using this address"
+        }
+    }
+}

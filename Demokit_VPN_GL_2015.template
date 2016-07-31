@@ -1,0 +1,300 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description"              : "(VPN) - This template deploys VPN instance. This template is intended to work with the AD and SQL building blocks of the same demo kits.\" **WARNING** This template creates Amazon EC2 Windows instance and related resources. You will be billed for the AWS resources used if you create a stack from this template.",
+    "Parameters"               : {
+        "KeyPairName" : {
+            "Description" : "Public/private key pairs allow you to securely connect to your instance after it launches",
+            "Type"        : "AWS::EC2::KeyPair::KeyName"
+        },
+ 	
+		"DMZSubnet1Id"          : {
+            "Description" : "ID of the subnet you want to provision the first SharePoint node into (e.g., subnet-a0246dcd)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        },
+		
+        "DMZSubnet2Id"          : {
+            "Description" : "ID of the subnet you want to provision the second SharePoint node into (e.g., subnet-e3246d8e)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        },		
+		
+		"PrivSub1Id"          : {
+            "Description" : "ID of the subnet you want to provision the first SharePoint node into (e.g., subnet-a0246dcd)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        },
+		
+        "PrivSub2Id"          : {
+            "Description" : "ID of the subnet you want to provision the second SharePoint node into (e.g., subnet-e3246d8e)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        },				
+	
+		"VPC"  : {
+            "Description" : "ID of the VPC (e.g., vpc-0343606e)",
+            "Type"        : "AWS::EC2::VPC::Id"
+        },
+		
+		"VPCCIDR": {
+			"Description": "The IP address range for Cloud Site.",
+			"Type": "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"Default": "172.99.0.0/16",
+			"AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+		},
+		
+		"PeerVPCCIDR": {
+			"Description": "The IP address range for on-premise Site.",
+			"Type": "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"Default": "10.99.0.0/16",
+			"AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+		},
+		
+		"DMZRouteTable"  : {
+            "Description" : "ID of the DMZRouteTable ",
+            "Type"        : "String"
+        },
+
+		"PrivateRouteTable"  : {
+            "Description" : "ID of the PrivateRouteTable",
+            "Type"        : "String"
+        },
+
+		"VPNEIP"  : {
+            "Description" : "EIP of the VPN Instance",
+            "Type"        : "String"
+        },
+		
+		"PeerEIP"  : {
+            "Description" : "PeerEIP of the VPN Instance",
+            "Type"        : "String"
+        }				
+	},	
+  
+    "Mappings"                 : {
+		"AWSWinRegionMap" : {																							
+            "ap-northeast-1" : {
+				"64" : "ami-cbf90ecb"
+            },
+            "ap-southeast-1" : {
+				"64" : "ami-68d8e93a"
+            }
+		}
+    },
+	
+    "Resources"  : {
+
+		"VPNInstance": {  
+			"Type": "AWS::EC2::Instance",
+			"Metadata" : {
+				"AWS::CloudFormation::Init" : { 
+					"configSets" : {
+						"config" : [
+							"setupfile"							
+						]
+					},
+					
+					"setupfile" : {
+						"packages" : {
+							"yum" : {
+								"openswan" : []
+							}
+						},
+						
+						"files" : {
+							"/etc/cfn/cfn-hup.conf" : {
+								"content" : { "Fn::Join" : ["", [
+									"[main]\n",
+									"stack=", { "Ref" : "AWS::StackId" }, "\n",
+									"region=", { "Ref" : "AWS::Region" }, "\n"
+								]]},
+							"mode" : "000400",
+							"owner" : "root",
+							"group" : "root"
+							},
+
+							"/etc/cfn/hooks.d/cfn-auto-reloader.conf" : {
+								"content": { "Fn::Join" : ["", [
+									"[cfn-auto-reloader-hook]\n",
+									"triggers=post.update\n",
+									"path=Resources.LaunchConfig.Metadata.AWS::CloudFormation::Init\n",
+									"action=/opt/aws/bin/cfn-init -v ",
+									" --stack ", { "Ref" : "AWS::StackName" },
+									" --resource LaunchConfig ",
+									" --region ", { "Ref" : "AWS::Region" }, "\n",
+									"runas=root\n"
+								]]}
+							},
+						
+						
+							"/etc/sysctl.conf" : {
+								"content" : { "Fn::Join" : [ "", [								
+									"net.ipv4.ip_forward = 1\n",
+									"net.ipv4.conf.all.accept_redirects = 0\n",
+									"net.ipv4.conf.all.send_redirects = 0\n",
+								 	"net.ipv4.conf.default.send_redirects = 0\n",
+									"net.ipv4.conf.eth0.send_redirects = 0\n",
+									"net.ipv4.conf.default.accept_redirects = 0\n",
+									"net.ipv4.conf.eth0.accept_redirects = 0\n"	
+									]]	
+			 					}	
+							},							
+							
+
+							"/etc/ipsec.d/vpn.conf"  :{
+								"content" : { "Fn::Join" : [ "", [
+										"conn vpn\n",
+										"      type=tunnel\n",
+										"      authby=secret\n",
+										"      left=%defaultroute\n",					
+										"      leftid=", { "Ref" : "VPNEIP" }, "\n",
+										"      leftnexthop=%defaultroute\n",
+										"      leftsubnet=", { "Ref" : "VPCCIDR" },  "\n",
+										"      right=",  { "Ref" : "PeerEIP" }, "\n",
+										"      rightsubnet=", { "Ref" : "PeerVPCCIDR" },  "\n",
+										"      pfs=yes\n",
+										"      auto=start\n"
+										]
+									]
+								}
+							},
+							
+							"/etc/ipsec.d/vpn.secrets" :{
+								"content" : { "Fn::Join" : [ "", [
+									{ "Ref" : "PeerEIP" },  " 0.0.0.0: PSK \"DemoKit\"\n"					
+										]
+									]
+								}
+							}									
+							
+						},
+								 
+						"services" : {
+							"sysvinit" : {								             			
+								"cfn-hup" : { "enabled" : "true", "ensureRunning" : "true",
+									"files" : ["/etc/cfn/cfn-hup.conf", "/etc/cfn/hooks.d/cfn-auto-reloader.conf"]}
+							}
+						}
+					}
+					
+				}			  
+			},
+				  
+			"Properties": {
+				"ImageId" : { "Fn::FindInMap" : [ "AWSWinRegionMap", { "Ref" : "AWS::Region" }, "64"]},
+				"InstanceType"   : "t2.small",
+				"KeyName"        : { "Ref" : "KeyPairName" },
+				"Tags"           : [
+                    {
+                        "Key" : "Name",
+                        "Value" : "VPN1"
+                    }
+                ],
+				"SourceDestCheck" : "false",
+				"NetworkInterfaces" : [{
+					"AssociatePublicIpAddress" : "true",
+					"GroupSet" : [ {"Ref" : "VPNSecurityGroup"} ],
+					"SubnetId" : {"Ref" : "DMZSubnet1Id"},
+					"DeviceIndex"              : "0"
+				}],
+				"UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
+					"#!/bin/bash -xe\n",
+					"yum update -y aws-cfn-bootstrap\n",						
+															
+					"/opt/aws/bin/cfn-init -v -c config",							
+					" -s ", { "Ref" : "AWS::StackName" },
+					" -r VPNInstance ",
+					"  --region ", { "Ref" : "AWS::Region" }, "\n",
+					"echo \"include /etc/ipsec.d/*.conf\" >> /etc/ipsec.conf \n",
+
+					"sysctl -p\n",
+					"service network restart\n",
+					"service ipsec start\n",
+					
+					"# Signal the status from cfn-init\n",
+					"/opt/aws/bin/cfn-signal -e $? ",
+					"         --stack ", { "Ref" : "AWS::StackName" },
+					"         --resource VPNInstance ",
+					"         --region ", { "Ref" : "AWS::Region" }, "\n"					
+					]]
+				}}				
+					
+            }
+		},
+		
+		"EIPASSOCIATE" : {
+			"Type" : "AWS::EC2::EIPAssociation",
+			"Properties" : {
+				"InstanceId" : { "Ref" : "VPNInstance" },
+				"EIP" : { "Ref" : "VPNEIP" }
+			}
+		},
+
+		"VPNSecurityGroup" : {
+			"Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+				"GroupDescription" : "Enable internal access to the AD device",        
+				"SecurityGroupIngress" : [
+					{ "IpProtocol" : "tcp", "FromPort" : "80",  "ToPort" : "80",  "CidrIp" : "0.0.0.0/0" } ,
+					{ "IpProtocol" : "tcp", "FromPort" : "22", "ToPort" : "22", "CidrIp" : "0.0.0.0/0"},
+					{ "IpProtocol" : "udp", "FromPort" : "500", "ToPort" : "500", "CidrIp" : "0.0.0.0/0"},
+					{ "IpProtocol" : "tcp", "FromPort" : "4500", "ToPort" : "4500", "CidrIp" : "0.0.0.0/0"},
+					{ "IpProtocol" : "-1", "FromPort" : "1", "ToPort" : "65535", "CidrIp" : "0.0.0.0/0"},
+					{ "IpProtocol" : "tcp", "FromPort" : "443", "ToPort" : "443", "CidrIp" : "0.0.0.0/0" } ],
+				"SecurityGroupEgress" : [
+					{ "IpProtocol" : "-1", "FromPort" : "1",  "ToPort" : "65535",  "CidrIp" : "0.0.0.0/0" } ],
+
+				"Tags" : [{
+					"Key" : "Name",
+					"Value" : { "Fn::Join" : ["", [ "Cloud Side VPN SG - ", { "Ref" : "AWS::StackName" } ]] }
+					}         
+				],
+			"VpcId" : { "Ref" : "VPC" }
+			}
+		},
+	
+		"DMZVPNRoute" : {
+			"Type" : "AWS::EC2::Route", 
+			"DependsOn"	:	"VPNInstance",
+			"Properties" : {
+				"RouteTableId" : { "Ref" : "DMZRouteTable" },
+				"DestinationCidrBlock" : { "Ref" : "PeerVPCCIDR" }, "InstanceId" : { "Ref" : "VPNInstance" }
+			}
+		},
+
+		"PrivateVPNRoute" : {
+			"Type" : "AWS::EC2::Route", 
+			"DependsOn"	:	"VPNInstance",			
+			"Properties" : {
+				"RouteTableId" : { "Ref" : "PrivateRouteTable" },
+				"DestinationCidrBlock" : { "Ref" : "PeerVPCCIDR" }, "InstanceId" : { "Ref" : "VPNInstance" }
+			}
+		}
+
+    },
+	
+    "Outputs"   : {
+		"EIP" : {
+		  "Description" : "EIP of VPNInstance",
+		  "Value" :  { "Ref" : "VPNEIP" }
+		},
+		
+		"VPNInstanceId" : {
+		  "Description" : "ID of VPNInstance",
+		  "Value" :  { "Ref" : "VPNInstance" }
+		},
+		
+		"DMZRouteTable" : {
+		  "Description" : "Routing Table ID of the public route table",
+		  "Value" :  { "Ref" : "DMZRouteTable" }
+		},
+		
+		"PrivateRouteTable" : {
+		  "Description" : "Routing Table ID of the private route table",
+		  "Value" :  { "Ref" : "PrivateRouteTable" }
+		}		
+	
+    }
+}

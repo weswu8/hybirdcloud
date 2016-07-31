@@ -1,0 +1,171 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description"              : "(Main) - This template control the deployment of Cloud Side for the hybird IT demo case.\" **WARNING** This template creates Amazon EC2 Windows instance and related resources. You will be billed for the AWS resources used if you create a stack from this template.",
+    "Parameters"               : {
+		"KeyPairName": {
+			"Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instance",
+			"Type": "AWS::EC2::KeyPair::KeyName",
+			"ConstraintDescription" : "must be the name of an existing EC2 KeyPair."
+		},
+		
+		"DomainAdminPassword"  : {
+            "Description" : "Password for amazing\\stackadmin. Must be at least 8 characters containing letters, numbers and symbols.default:Password123",
+            "Type"        : "String",
+            "MinLength"   : "8",
+            "MaxLength"   : "32",
+            "AllowedPattern" : "(?=^.{6,255}$)((?=.*\\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*",
+            "NoEcho"         : "true",
+            "Default"        : "Password123"
+        },
+		
+ 		"VPCCIDR": {
+			"Description": "The IP address range for Cloud Site.",
+			"Type": "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"Default": "172.99.0.0/16",
+			"AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+		},
+		
+		"PeerVPCCIDR": {
+			"Description": "The IP address range for on-premise Site.",
+			"Type": "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"Default": "10.99.0.0/16",
+			"AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+		},
+				
+		"DMZ1CIDR" : {
+			"Description" : "CIDR block for the public subnet1 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "172.99.1.0/24"
+		},
+	
+		"DMZ2CIDR" : {
+			"Description" : "CIDR block for the public subnet2 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "172.99.2.0/24"
+		},
+		
+		"PrivSub1CIDR" : {
+			"Description" : "CIDR block for the private subnet1 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "172.99.3.0/24"
+		},
+	
+		"PrivSub2CIDR" : {
+			"Description" : "CIDR block for the private subnet2 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "172.99.4.0/24"
+		},
+		
+		"AD1PrivateIp"         : {
+            "Description" : "Fixed private IP for the first Active Directory server located in On-Premises DC",
+            "Type"        : "String",
+            "Default"     : "10.99.0.10"
+        },
+		
+        "AD2PrivateIp"         : {
+            "Description" : "Fixed private IP for the second Active Directory server located in On-Premises DC",
+            "Type"        : "String",
+            "Default"     : "10.99.64.10"
+        },
+			
+				
+		"ELBConfiguration"      : {
+            "Description" : "Specify how to configure the Elastic Load Balancer. Allowed values are internal or external",
+            "AllowedValues" : [
+                "external"
+            ],
+            "Type"          : "String",
+            "Default"       : "external"
+        },
+	
+		"VPNEIP" : {
+			"Description" : "EIP of the VPN Instance within current VPC",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+			"Type" : "String"
+		},
+		
+		"PeerEIP" : {
+			"Description" : "EIP of the VPN Instance within remote VPC",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+			"Type" : "String"
+		}		
+	
+	},	
+
+	"Resources" : {
+    	"VPCStack" : {
+	    	"Type" : "AWS::CloudFormation::Stack",
+			"Properties" : {
+           		"TemplateURL" : "https://s3-ap-southeast-1.amazonaws.com/aws-demokits/Demokit_VPC_GL_2015.template",
+           	 	"Parameters" : {
+					"DMZ1CIDR" : {"Ref" : "DMZ1CIDR"},
+					"DMZ2CIDR" : {"Ref" : "DMZ2CIDR"},
+					"PrivSub1CIDR" : {"Ref" : "PrivSub1CIDR"},
+					"PrivSub2CIDR" : {"Ref" : "PrivSub2CIDR"},
+					"VPCCIDR" : {"Ref" : "VPCCIDR"}
+           		}
+			}
+      	},		
+ 
+    	"VPNStack" : {
+	    	"Type" : "AWS::CloudFormation::Stack",
+			"DependsOn" : "VPCStack",
+       	 	"Properties" : {
+           		"TemplateURL" : "https://s3-ap-southeast-1.amazonaws.com/aws-demokits/Demokit_VPN_GL_2015.template",
+           	 	"Parameters" : {
+					"KeyPairName" : {"Ref" : "KeyPairName"},
+					"DMZSubnet1Id" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.DMZSubnet1Id" ] },
+					"DMZSubnet2Id" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.DMZSubnet2Id" ] },
+					"PrivSub1Id" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.PrivateSubnet1Id" ] },
+					"PrivSub2Id" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.PrivateSubnet2Id" ] },
+					"VPC" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.VPC" ] },
+					"VPCCIDR" : {"Ref" : "VPCCIDR"},
+					"PeerVPCCIDR" : {"Ref" : "PeerVPCCIDR"},
+					"DMZRouteTable"  : { "Fn::GetAtt" : [ "VPCStack", "Outputs.DMZRouteTable" ] },          
+					"PrivateRouteTable"  : { "Fn::GetAtt" : [ "VPCStack", "Outputs.PrivateRouteTable" ] }, 
+					"VPNEIP"  : {"Ref" : "VPNEIP"},
+					"PeerEIP"  : {"Ref" : "PeerEIP"}			
+	           		}
+			}
+      	},	
+
+		"SPStack" : {
+	    	"Type" : "AWS::CloudFormation::Stack",
+			"DependsOn" : "VPNStack",
+       	 	"Properties" : {
+           		"TemplateURL" : "https://s3-ap-southeast-1.amazonaws.com/aws-demokits/Demokit_SP_GL_2015.template",
+           	 	"Parameters" : {
+					"DomainAdminPassword" : {"Ref" : "DomainAdminPassword"},
+					"KeyPairName" : {"Ref" : "KeyPairName"},
+					"AD1PrivateIp" : {"Ref" : "AD1PrivateIp"},
+					"AD2PrivateIp" : {"Ref" : "AD2PrivateIp"},
+					"VPC" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.VPC" ] },
+					"DMZSubnet1Id" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.DMZSubnet1Id" ] },
+					"DMZSubnet2Id" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.DMZSubnet2Id" ] }
+           		}
+			}
+      	}		
+	}
+}

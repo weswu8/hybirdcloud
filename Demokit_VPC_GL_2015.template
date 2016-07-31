@@ -1,0 +1,357 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description"              : "(VPC) - This template deploys VPC. This template will create a VPC with two DMZ subnet and two private subnet. **WARNING** This template creates Amazon EC2 Windows instance and related resources. You will be billed for the AWS resources used if you create a stack from this template.",
+	
+    "Parameters"               : {
+
+ 		"VPCCIDR": {
+			"Description": "The IP address range for Cloud Site.",
+			"Type": "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"Default": "10.10.0.0/16",
+			"AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+		},
+		
+			
+		"DMZ1CIDR" : {
+			"Description" : "CIDR block for the public subnet1 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "10.10.1.0/24"
+		},
+	
+		"DMZ2CIDR" : {
+			"Description" : "CIDR block for the public subnet2 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "10.10.2.0/24"
+		},
+		
+		"PrivSub1CIDR" : {
+			"Description" : "CIDR block for the private subnet1 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "10.10.3.0/24"
+		},
+	
+		"PrivSub2CIDR" : {
+			"Description" : "CIDR block for the private subnet2 in the Cloud Site",
+			"Type" : "String",
+			"MinLength": "9",
+			"MaxLength": "18",
+			"AllowedPattern" : "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+			"ConstraintDescription" : "must be a valid CIDR range of the form x.x.x.x/x and fall in the overall VPC range",
+			"Default" : "10.10.4.0/24"
+		},
+		
+		"NATInstanceType" : {
+            "Description" : "Amazon EC2 instance type for the NAT Instances",
+            "Type"        : "String",
+            "Default"     : "t2.small",
+            "AllowedValues" : [
+                "t2.small",
+                "t2.medium"
+            ]
+        }
+	},	
+ 
+    "Mappings"                 : {
+        "AWSInstanceType2Arch" : {
+            "t2.small" : {
+                "Arch" : "64"
+            },
+            "t2.medium" : {
+                "Arch" : "64"
+            }
+        },        
+        "AWSRegionArchNatAMI"  : {
+            "ap-southeast-1" : {
+                "64" : "ami-b082dae2"
+            },
+            "ap-northeast-1" : {
+                "64" : "ami-55c29e54"
+            }
+        }
+    },
+	
+    "Resources"  : {
+	
+		"VPC" : {
+			"Type" : "AWS::EC2::VPC",
+			"Properties" : {
+				"CidrBlock" : { "Ref" : "VPCCIDR" },
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Public" },
+					{ "Key" : "Name", "Value" : "amazing" }					
+				]
+			}
+		},		
+	
+		"DMZSubnet1Id" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref" : "VPC" },
+				"AvailabilityZone" : { "Fn::Select" : [ 0, { "Fn::GetAZs" : ""  }   ]   },
+				"CidrBlock" : { "Ref" : "DMZ1CIDR" },
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Public" },
+					{ "Key" : "Name", "Value" :  "DMZSub1" }
+				]
+			}
+		},
+	
+		"DMZSubnet2Id" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref" : "VPC" },
+				"AvailabilityZone" : { "Fn::Select" : [ 1, { "Fn::GetAZs" : ""  }   ]   },
+				"CidrBlock" : { "Ref" : "DMZ2CIDR" },
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Public" },
+					{ "Key" : "Name", "Value" :  "DMZSub2" }
+				]
+			}
+		},
+		
+		"PrivateSubnet1Id" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref" : "VPC" },
+				"AvailabilityZone" : { "Fn::Select" : [ 0, { "Fn::GetAZs" : ""  }   ]   },
+				"CidrBlock" : { "Ref" : "PrivSub1CIDR" },
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Private" },
+					{ "Key" : "Name", "Value" :  "PrivSub1" }
+				]
+			}
+		},
+		
+		"PrivateSubnet2Id" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref" : "VPC" },
+				"AvailabilityZone" : { "Fn::Select" : [ 1, { "Fn::GetAZs" : ""  }   ]   },
+				"CidrBlock" : { "Ref" : "PrivSub2CIDR" },
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Private" },
+					{ "Key" : "Name", "Value" :  "PrivSub2" }
+				]
+			}
+		},
+
+		"InternetGateway" : {
+			"Type" : "AWS::EC2::InternetGateway",
+			"Properties" : {
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Public" }
+				]
+			}
+		},
+
+		"AttachInternetGateway" : {
+			"Type" : "AWS::EC2::VPCGatewayAttachment",
+			"Properties" : {
+				"VpcId" : { "Ref" : "VPC" },
+				"InternetGatewayId" : { "Ref" : "InternetGateway" }
+			}
+		},
+		
+		"DMZRouteTable" : {
+			"Type" : "AWS::EC2::RouteTable",
+			"Properties" : {
+				"VpcId" : { "Ref" : "VPC" },
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Public" },
+					{ "Key" : "Name", "Value" :  "DMZRouteTable" }
+				]
+			}
+		},
+		
+		"PublicRoute1" : {
+			"Type" : "AWS::EC2::Route",      
+			"Properties" : {
+				"RouteTableId" : { "Ref" : "DMZRouteTable" },
+				"DestinationCidrBlock" : "0.0.0.0/0", "GatewayId" : { "Ref" : "InternetGateway"  }				
+			}
+		},
+			
+		"PrivateRouteTable" : {
+			"Type" : "AWS::EC2::RouteTable",
+			"Properties" : {
+				"VpcId" : { "Ref" : "VPC" },
+				"Tags" : [
+					{ "Key" : "Application", "Value" : { "Ref" : "AWS::StackId" } },
+					{ "Key" : "Network", "Value" : "Public" },
+					{ "Key" : "Name", "Value" :  "PrivateRouteTable" }
+				]
+			}
+		},	
+		
+	    "PrivateRoute"                    : {
+            "Type" : "AWS::EC2::Route",
+			"DependsOn"	:	"NAT1",
+            "Properties" : {
+                "RouteTableId" : {
+                    "Ref" : "PrivateRouteTable"
+                },
+                "DestinationCidrBlock" : "0.0.0.0/0",
+                "InstanceId"           : {
+                    "Ref" : "NAT1"
+                }
+            }
+        }, 
+		
+		"PublicSubnetRouteTableAssociation1" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+			"SubnetId" : { "Ref" : "DMZSubnet1Id" },
+			"RouteTableId" : { "Ref" : "DMZRouteTable" }
+			}
+		},
+
+		"PublicSubnetRouteTableAssociation2" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+			"SubnetId" : { "Ref" : "DMZSubnet2Id" },
+			"RouteTableId" : { "Ref" : "DMZRouteTable" }
+			}
+		},		
+		
+		"PrivateSubnetRouteTableAssociation1" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+			"SubnetId" : { "Ref" : "PrivateSubnet1Id" },
+			"RouteTableId" : { "Ref" : "PrivateRouteTable" }
+			}
+		},
+
+		"PrivateSubnetRouteTableAssociation2" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+			"SubnetId" : { "Ref" : "PrivateSubnet2Id" },
+			"RouteTableId" : { "Ref" : "PrivateRouteTable" }
+			}
+		},
+        "NAT1" : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId" : {
+                    "Fn::FindInMap" : [
+                        "AWSRegionArchNatAMI",
+                        {
+                            "Ref" : "AWS::Region"
+                        },
+                        {
+                            "Fn::FindInMap" : [
+                                "AWSInstanceType2Arch",
+                                {
+                                    "Ref" : "NATInstanceType"
+                                },
+                                "Arch"
+                            ]
+                        }
+                    ]
+                },
+                "InstanceType" : {
+                    "Ref" : "NATInstanceType"
+                },
+                "Tags"         : [
+                    {
+                        "Key" : "Name",
+                        "Value" : "NAT1"
+                    }
+                ],
+                "NetworkInterfaces" : [
+                    {
+                        "GroupSet" : [
+                            {
+                                "Ref" : "NATSecurityGroup"
+                            }
+                        ],
+                        "AssociatePublicIpAddress" : "true",
+                        "DeviceIndex"              : "0",
+                        "DeleteOnTermination"      : "true",
+                        "SubnetId"                 : {
+                            "Ref" : "DMZSubnet1Id"
+                        }
+                    }
+                ],                
+                "SourceDestCheck"   : "false"
+            }
+        },
+        "NATSecurityGroup"                    : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "Enables SSH access to NAT1 in AZ1 via port 22 and outbound internet access via private subnets",
+                "VpcId"            : {
+                    "Ref" : "VPC"
+                },
+                "SecurityGroupIngress" : [
+                    {
+                        "IpProtocol" : "-1",
+                        "FromPort"   : "1",
+                        "ToPort"     : "65535",
+                        "CidrIp"     : "0.0.0.0/0"
+                    }
+                ]
+            }
+        }		
+		
+    },
+	
+    "Outputs" : {
+		"PrivateSubnet1Id" : {
+		  "Description" : "SubnetId of the private subnet1",
+		  "Value" :  { "Ref" : "PrivateSubnet1Id" }
+		},
+		
+		"PrivateSubnet2Id" : {
+		  "Description" : "SubnetId of the private subnet2",
+		  "Value" :  { "Ref" : "PrivateSubnet2Id" }
+		},
+
+		"DMZSubnet1Id" : {
+		  "Description" : "SubnetId of the public subnet1",
+		  "Value" :  { "Ref" : "DMZSubnet1Id" }
+		},
+		
+		"DMZSubnet2Id" : {
+		  "Description" : "SubnetId of the public subnet2",
+		  "Value" :  { "Ref" : "DMZSubnet2Id" }
+		},	
+	
+		"VPC" : {
+		  "Description" : "VPC id ",
+		  "Value" :  { "Ref" : "VPC" }
+		},
+		
+		"DMZRouteTable" : {
+		  "Description" : "Routing Table ID of the public route table",
+		  "Value" :  { "Ref" : "DMZRouteTable" }
+		},
+		
+		"PrivateRouteTable" : {
+		  "Description" : "Routing Table ID of the private route table",
+		  "Value" :  { "Ref" : "PrivateRouteTable" }
+		}		
+		
+    }
+}

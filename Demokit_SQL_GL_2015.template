@@ -1,0 +1,405 @@
+{
+    "AWSTemplateFormatVersion" : "2010-09-09",
+    "Description"              : "(SQL) - This template deploys two Windows Server SQL Server 2012 mirroring cluster. This template is intended to work with the AD building block of the same demo kits.\" **WARNING** This template creates Amazon EC2 Windows instance and related resources. You will be billed for the AWS resources used if you create a stack from this template.",
+    "Parameters"               : {
+        "KeyPairName" : {
+            "Description" : "Public/private key pairs allow you to securely connect to your instance after it launches",
+            "Type"        : "AWS::EC2::KeyPair::KeyName"
+        },
+		
+        "SQL1InstanceType" : {
+            "Description" : "Amazon EC2 instance type for the 1st SQL Server Node",
+            "Type"        : "String",
+            "Default"     : "r3.2xlarge",
+            "AllowedValues" : [
+				"r3.xlarge",
+                "r3.2xlarge",
+                "r3.4xlarge"
+            ],
+            "ConstraintDescription" : "Only EBS Optimized instance types r3.xlarge, r3.2xlarge, r3.4xlarge allowed"
+        },
+		
+        "SQL2InstanceType" : {
+            "Description" : "Amazon EC2 instance type for the 2nd SQL Server Node",
+            "Type"        : "String",
+            "Default"     : "r3.2xlarge",
+            "AllowedValues" : [
+ 				"r3.xlarge",
+                "r3.2xlarge",
+                "r3.4xlarge"
+            ],
+            "ConstraintDescription" : "Only EBS Optimized instance types r3.xlarge, r3.2xlarge, r3.4xlarge allowed"
+        },
+				
+        "DomainAdminPassword"   : {
+            "Description" : "Password for the domain Admin user. This account must be amazing\\StackAdmin, It is also the SQL service account. Must be at least 8 characters containing letters, numbers and symbols.default:Password123",
+            "Type"        : "String",
+            "MinLength"   : "8",
+            "MaxLength"   : "32",
+            "AllowedPattern" : "(?=^.{6,255}$)((?=.*\\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*",
+            "NoEcho"         : "true",
+            "Default"        : "Password123"
+        },
+        		
+        "AD1PrivateIp"        : {
+            "Description" : "Fixed private IP for the first existing Active Directory server located in AZ1",
+            "Type"        : "String",
+            "Default"     : "10.99.0.10"
+        },
+		
+        "AD2PrivateIp"        : {
+            "Description" : "Fixed private IP for the second existing Active Directory server located in AZ2",
+            "Type"        : "String",
+            "Default"     : "10.99.64.10"
+        },
+		
+        "VPC"                       : {
+            "Description" : "ID of the VPC (e.g., vpc-0343606e)",
+            "Type"        : "AWS::EC2::VPC::Id"
+        },
+		
+        "PrivateSubnet1Id"          : {
+            "Description" : "ID of the subnet you want to provision the first SQL node into (e.g., subnet-a0246dcd)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        },
+		
+        "PrivateSubnet2Id"          : {
+            "Description" : "ID of the subnet you want to provision the second SQL node into (e.g., subnet-e3246d8e)",
+            "Type"        : "AWS::EC2::Subnet::Id"
+        }
+    },
+    "Mappings"                 : {
+		"AWSWinRegionMap" : {
+            "ap-northeast-1" : {
+                "SQL1" : "ami-4a5dfe4a",
+				"SQL2" : "ami-5c5dfe5c"
+            },
+            "ap-southeast-1" : {
+                "SQL1" : "ami-5857560a",
+				"SQL2" : "ami-42575610"
+            }
+		}
+    },
+    "Resources"  : {
+        "SQL1"              : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId" : {
+                    "Fn::FindInMap" : [
+                        "AWSWinRegionMap",
+                        {
+                            "Ref" : "AWS::Region"
+                        },
+						"SQL1"
+                    ]				
+				},
+                "InstanceType" : {
+                    "Ref" : "SQL1InstanceType"
+                },
+                "EbsOptimized" : "true",
+                "NetworkInterfaces" : [
+                    {
+                        "DeleteOnTermination" : "true",
+                        "DeviceIndex"         : 0,
+                        "SubnetId"            : {
+                            "Ref" : "PrivateSubnet1Id"
+                        },
+                        "GroupSet"            : [
+                            {
+                                "Ref" : "SQLSecurityGroup"
+                            }
+                        ]
+                    }
+                ],
+                "Tags"              : [
+                    {
+                        "Key" : "Name",
+                        "Value" : "SQL1"
+                    }
+                ],
+                "BlockDeviceMappings" : [
+                    {
+                        "DeviceName" : "/dev/sda1",
+                        "Ebs"        : {
+                            "VolumeSize" : "100",
+                            "VolumeType" : "gp2"
+                        }
+                    }
+                ],
+                
+                "KeyName"             : {
+                    "Ref" : "KeyPairName"
+                },
+                "UserData"            : {
+                    "Fn::Base64" : {
+                        "Fn::Join" : [
+                            "",
+                            [
+                                "<powershell>\n",
+                                "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                                    {
+                                        "Ref" : "AD1PrivateIp"
+                                    },
+                                    ",",
+                                    {
+                                        "Ref" : "AD2PrivateIp"
+                                    },
+                                "\n",
+								"$client = New-Object system.net.WebClient",
+								"\n",
+                                "$client.DownloadFile(\"https://s3-ap-southeast-1.amazonaws.com/aws-demokits/scripts/CustomerizeAccountSetting.ps1\",\"C:\\CustomerizeAccountSetting.ps1\")",
+                                "\n",
+								"powershell.exe -ExecutionPolicy RemoteSigned -Command c:\\CustomerizeAccountSetting.ps1",                                
+								"  -DomainDNSName \"amazing.com\" -DomainNetBIOSName \"amazing\"  -DomainAdminUser \"StackAdmin\"  -ServerBIOSName \"SQL1\"",								
+                                "  -DomainAdminPassword \"",
+                                {
+                                    "Ref" : "DomainAdminPassword"
+                                },
+                                "\"",								
+								"  -ServiceName \"MSSQLSERVER\"",
+								"\n",
+                                "</powershell>\n",
+								"<persist>true</persist>\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+		
+        "SQL2"              : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId" : {
+                    "Fn::FindInMap" : [
+                        "AWSWinRegionMap",
+                        {
+                            "Ref" : "AWS::Region"
+                        },
+						"SQL2"
+                    ]				
+				},
+                "InstanceType" : {
+                    "Ref" : "SQL2InstanceType"
+                },
+                "EbsOptimized" : "true",
+                "NetworkInterfaces" : [
+                    {
+                        "DeleteOnTermination" : "true",
+                        "DeviceIndex"         : 0,
+                        "SubnetId"            : {
+                            "Ref" : "PrivateSubnet2Id"
+                        },                        
+                        "GroupSet"            : [
+                            {
+                                "Ref" : "SQLSecurityGroup"
+                            }
+                        ]
+                    }
+                ],
+                "Tags"              : [
+                    {
+                        "Key" : "Name",
+                        "Value" : "SQL2"
+                    }
+                ],
+                "BlockDeviceMappings" : [
+                    {
+                        "DeviceName" : "/dev/sda1",
+                        "Ebs"        : {
+                            "VolumeSize" : "100",
+                            "VolumeType" : "gp2"
+                        }
+                    }
+                ],
+                
+                "KeyName"             : {
+                    "Ref" : "KeyPairName"
+                },
+                "UserData"            : {
+                    "Fn::Base64" : {
+                        "Fn::Join" : [
+                            "",
+                            [
+                                "<powershell>\n",
+                                "Get-NetAdapter | Set-DnsClientServerAddress -ServerAddresses ",
+                                    {
+                                        "Ref" : "AD1PrivateIp"
+                                    },
+                                    ",",
+                                    {
+                                        "Ref" : "AD2PrivateIp"
+                                    },
+                                "\n",
+								"$client = New-Object system.net.WebClient",
+								"\n",
+                                "$client.DownloadFile(\"https://s3-ap-southeast-1.amazonaws.com/aws-demokits/scripts/CustomerizeAccountSetting.ps1\",\"C:\\CustomerizeAccountSetting.ps1\")",
+                                "\n",
+								"powershell.exe -ExecutionPolicy RemoteSigned -Command c:\\CustomerizeAccountSetting.ps1",                                
+                                "  -DomainDNSName \"amazing.com\" -DomainNetBIOSName \"amazing\"  -DomainAdminUser \"StackAdmin\"  -ServerBIOSName \"SQL2\"",								
+                                "  -DomainAdminPassword \"",
+                                {
+                                    "Ref" : "DomainAdminPassword"
+                                },
+                                "\"",								
+								"  -ServiceName \"MSSQLSERVER\"",
+								"\n",
+                                "</powershell>\n",
+								"<persist>true</persist>\n"
+                            ]
+                        ]
+                    }
+                }
+            }
+        },
+
+        "SQLSecurityGroup"      : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "Enable the SQL Mirroring Cluster communications",
+                "VpcId"            : {
+                    "Ref" : "VPC"
+                },
+                "SecurityGroupIngress" : [
+                    {
+                        "IpProtocol" : "icmp",
+                        "FromPort"   : "-1",
+                        "ToPort"     : "-1",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },                    
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "135",
+                        "ToPort"     : "135",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "135",
+                        "ToPort"     : "135",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },                      
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "137",
+                        "ToPort"     : "137",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+					{
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "137",
+                        "ToPort"     : "137",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "445",
+                        "ToPort"     : "445",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "445",
+                        "ToPort"     : "445",
+                        "CidrIp"     : "0.0.0.0/0"
+                    }, 					
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "1433",
+                        "ToPort"     : "1434",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },                    
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "3343",
+                        "ToPort"     : "3343",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "3343",
+                        "ToPort"     : "3343",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },    					
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "5022",
+                        "ToPort"     : "5022",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },                    
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "5985",
+                        "ToPort"     : "5985",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },  
+					{
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "53",
+                        "ToPort"     : "53",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "53",
+                        "ToPort"     : "53",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "49152",
+                        "ToPort"     : "65535",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol" : "udp",
+                        "FromPort"   : "49152",
+                        "ToPort"     : "65535",
+                        "CidrIp"     : "0.0.0.0/0"
+                    },                                    
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort"   : "3389",
+                        "ToPort"     : "3389",
+                        "CidrIp"     : "0.0.0.0/0"
+                    }
+                ]
+            }
+        }
+
+    },
+    "Outputs"                  : {
+        "DomainAdmin" : {
+            "Value" : "AMAZING\\StackAdmin",
+            "Description" : "Domain administrator account"
+        },
+		"DomainDNSName"  : {
+            "Value" : "amazing.com",
+            "Description" : "Fully qualified domain name (FQDN) of the forest root domain"
+        },
+		"DomainNetBIOSName"  : {
+            "Value" : "amazing",
+            "Description" : "NetBIOS name of the domain"
+        },
+		"LocalAdmin"  : {
+            "Value" : "Administrator",
+            "Description" : "Please retrieve Administrator password of the instance"
+        },
+        "SQL1NetBIOSName" : {
+            "Value" : "SQL1",
+            "Description" : "NetBIOS name of the 1st SQL Server Node"
+        },
+        "SQL2NetBIOSName" : {
+            "Value" : "SQL2",
+            "Description" : "NetBIOS name of the 2nd SQL Server Node"
+        },
+		"MirroredDatabase"  : {
+            "Value" : "amadb",
+            "Description" : "The mirrored database that we have created"
+        },
+		"SQLServiceAccount"  : {
+            "Value" : "AMAZING\\StackAdmin",
+            "Description" : "The administrator for the SQL server database"
+        }
+    }
+}

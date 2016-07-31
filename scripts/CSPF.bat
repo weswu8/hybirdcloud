@@ -1,0 +1,1 @@
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command ".'C:\Program Files\Common Files\microsoft shared\Web Server Extensions\15\CONFIG\POWERSHELL\Registration\SharePoint.ps1'; c:\ChangeSPFeatures.ps1" 
