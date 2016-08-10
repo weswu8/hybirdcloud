@@ -9,6 +9,7 @@ How it works
 ====
 
 ####Quick Mast template for On-premises DC: Demokit_HybridIT_OnPremises_QuickMaster_2015.template
+----
 ##### Demokit_AD_GL_2015.template
         will create a VPC with:
         2xPublic Subnet
@@ -27,6 +28,7 @@ How it works
 
 
 ####Quick Mast template for Cloud DC: Demokit_HybridIT_Cloud_QuickMaster_2015.template
+----
 ##### Demokit_VPC_GL_2015.template
         VPC(here): will create a VPC with:
         2xPublic Subnet
