@@ -8,8 +8,8 @@ Author: Forest Zhang, Di,Yingwei, wesley
 How it works
 ====
 
-####Quick Mast template for On-premises DC: Demokit_HybridIT_OnPremises_QuickMaster_2015.template
-----
+####Quick Mast template for On-premises DC(模拟本地数据中心): Demokit_HybridIT_OnPremises_QuickMaster_2015.template
+
 ##### Demokit_AD_GL_2015.template
         will create a VPC with:
         2xPublic Subnet
@@ -26,9 +26,9 @@ How it works
         will Create:
         2xSQL 2012 Standard Server Cluster with mirroring relationship
 
-
-####Quick Mast template for Cloud DC: Demokit_HybridIT_Cloud_QuickMaster_2015.template
 ----
+####Quick Mast template for Cloud DC(模拟云端数据中心): Demokit_HybridIT_Cloud_QuickMaster_2015.template
+
 ##### Demokit_VPC_GL_2015.template
         VPC(here): will create a VPC with:
         2xPublic Subnet
