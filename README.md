@@ -5,6 +5,10 @@ this demo will user AWS CloudFormation, EC2 and related resource
 
 Author: Forest Zhang, Di,Yingwei, wesley
 
+System Architecture
+====
+![architecture](sysarchitecure.png "architecture")
+
 How it works
 ====
 
